@@ -111,12 +111,27 @@ pub mod solana_anchor_escrow {
 // In that case, you can access the account data via a trivial method call. For example: ctx.accounts.vault_account.mint
 
 #[derive(Accounts)]
+#[instruction(vault_account_bump: u8, initializer_amount: u64)]
 pub struct Initialize<'info> {
+    #[account(mut, signer)] // Checks the given account signed the transaction
     pub initializer: AccountInfo<'info>, // Signer of InitialEscrow instruction. To be stored in EscrowAccount
     pub mint: Account<'info, Mint>, // The account of token account for token exchange. To be stored in EscrowAccount
+    #[account(
+        init,
+        seeds = [b"token-seed".as_ref()],
+        bump = vault_account_bump,
+        payer = initializer,
+        token::mint = mint,
+        token::authority = initializer,
+    )]  // Notice that we used a rather complex constraint to create an token account that has a PDA key
     pub vault_account: Account<'info, TokenAccount>, // The account of token account for token exchange. To be stored in EscrowAccount
+    #[account(
+        mut,
+        constraint = initializer_deposit_token_account.amount >= initializer_amount
+    )] // Executes the given code as a constraint. The expression should evaluate to a boolean
     pub initializer_deposit_token_account: Account<'info, TokenAccount>, // The account of TokenProgram
     pub initializer_receive_token_account: Account<'info, TokenAccount>, // The account of EscrowAccount
+    #[account(zero)]
     pub escrow_account: Box<Account<'info, EscrowAccount>>, // The account of Vault, which is created by Anchor via constraints.
     pub system_program: AccountInfo<'info>,
     pub rent: Sysvar<'info, Rent>,
@@ -125,23 +140,47 @@ pub struct Initialize<'info> {
 
 #[derive(Accounts)]
 pub struct Cancel<'info> {
+    #[account(mut, signer)] 
     pub initializer: AccountInfo<'info>, // The initializer of EscrowAccount
-    pub initializer_deposit_token_account: Account<'info, TokenAccount>, // The address of token account for token exchange
+    #[account(mut)] // Marks the account as mutable and persists the state transition
     pub vault_account: Account<'info, TokenAccount>, // The program derived address
     pub vault_authority: AccountInfo<'info>, // The program derived address
+    #[account(mut)]
+    pub initializer_deposit_token_account: Account<'info, TokenAccount>, // The address of token account for token exchange
+    #[account(
+        mut,
+        constraint = escrow_account.initializer_key == *initializer.key,
+        constraint = escrow_account.initializer_deposit_token_account == *initializer_deposit_token_account.to_account_info().key,
+        close = initializer
+    )] // close = <target\> // Marks the account as being closed at the end of the instruction’s execution, sending the rent exemption lamports to the specified
     pub escrow_account: Box<Account<'info, EscrowAccount>>, // The address of EscrowAccount. Have to check if the EscrowAccount follows certain constraints.
     pub token_program: AccountInfo<'info>, // The address of TokenProgram
 }
 
 #[derive(Accounts)]
 pub struct Exchange<'info> {
+    #[account(signer)] 
     pub taker: AccountInfo<'info>, // Singer of Exchange instruction
+    #[account(mut)]
     pub taker_deposit_token_account: Account<'info, TokenAccount>, // Token account for token exchange
+    #[account(mut)]
     pub taker_receive_token_account: Account<'info, TokenAccount>, // Token account for token exchange
+    #[account(mut)]
     pub initializer_deposit_token_account: Account<'info, TokenAccount>, // Token account for token exchange
+    #[account(mut)]
     pub initializer_receive_token_account: Account<'info, TokenAccount>, // Token account for token exchange
+    #[account(mut)]
     pub initializer: AccountInfo<'info>, // To be used in constraints
+    #[account(
+        mut,
+        constraint = escrow_account.taker_amount <= taker_deposit_token_account.amount,
+        constraint = escrow_account.initializer_deposit_token_account == *initializer_deposit_token_account.to_account_info().key,
+        constraint = escrow_account.initializer_receive_token_account == *initializer_receive_token_account.to_account_info().key,
+        constraint = escrow_account.initializer_key == *initializer.key,
+        close = initializer
+    )]
     pub escrow_account: Box<Account<'info, EscrowAccount>>, // The address of EscrowAccount. Have to check if the EscrowAccount follows certain constraints.
+    #[account(mut)]
     pub vault_account: Account<'info, TokenAccount>, // The program derived address
     pub vault_authority: AccountInfo<'info>, // The program derived address
     pub token_program: AccountInfo<'info>, // The address of TokenProgram
