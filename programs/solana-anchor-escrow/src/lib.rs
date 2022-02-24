@@ -28,19 +28,46 @@ pub mod solana_anchor_escrow {
     }
 }
 
-#[derive(Accounts)]
-pub struct Initialize<'info> {
-    // TODO
-}
+// AccountInfo vs. Account:
+//
+// It seems proper to use Account over AccountInfo when you want Anchor to deserialize the data for convenience. 
+// In that case, you can access the account data via a trivial method call. For example: ctx.accounts.vault_account.mint
 
 #[derive(Accounts)]
-pub struct Exchange<'info> {
-    // TODO
+pub struct Initialize<'info> {
+    pub initializer: AccountInfo<'info>, // Signer of InitialEscrow instruction. To be stored in EscrowAccount
+    pub mint: Account<'info, Mint>, // The account of token account for token exchange. To be stored in EscrowAccount
+    pub vault_account: Account<'info, TokenAccount>, // The account of token account for token exchange. To be stored in EscrowAccount
+    pub initializer_deposit_token_account: Account<'info, TokenAccount>, // The account of TokenProgram
+    pub initializer_receive_token_account: Account<'info, TokenAccount>, // The account of EscrowAccount
+    pub escrow_account: Box<Account<'info, EscrowAccount>>, // The account of Vault, which is created by Anchor via constraints.
+    pub system_program: AccountInfo<'info>,
+    pub rent: Sysvar<'info, Rent>,
+    pub token_program: AccountInfo<'info>,
 }
 
 #[derive(Accounts)]
 pub struct Cancel<'info> {
-    // TODO
+    pub initializer: AccountInfo<'info>, // The initializer of EscrowAccount
+    pub initializer_deposit_token_account: Account<'info, TokenAccount>, // The address of token account for token exchange
+    pub vault_account: Account<'info, TokenAccount>, // The program derived address
+    pub vault_authority: AccountInfo<'info>, // The program derived address
+    pub escrow_account: Box<Account<'info, EscrowAccount>>, // The address of EscrowAccount. Have to check if the EscrowAccount follows certain constraints.
+    pub token_program: AccountInfo<'info>, // The address of TokenProgram
+}
+
+#[derive(Accounts)]
+pub struct Exchange<'info> {
+    pub taker: AccountInfo<'info>, // Singer of Exchange instruction
+    pub taker_deposit_token_account: Account<'info, TokenAccount>, // Token account for token exchange
+    pub taker_receive_token_account: Account<'info, TokenAccount>, // Token account for token exchange
+    pub initializer_deposit_token_account: Account<'info, TokenAccount>, // Token account for token exchange
+    pub initializer_receive_token_account: Account<'info, TokenAccount>, // Token account for token exchange
+    pub initializer: AccountInfo<'info>, // To be used in constraints
+    pub escrow_account: Box<Account<'info, EscrowAccount>>, // The address of EscrowAccount. Have to check if the EscrowAccount follows certain constraints.
+    pub vault_account: Account<'info, TokenAccount>, // The program derived address
+    pub vault_authority: AccountInfo<'info>, // The program derived address
+    pub token_program: AccountInfo<'info>, // The address of TokenProgram
 }
 
 // we design an account that stores the minimum information to validate the escrow state and keep the integrity of the program:
